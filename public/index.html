@@ -1,0 +1,761 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Finodha - Zerodha-Style Margin Loan & Portfolio Ledger</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23ff5722'><polygon points='12 2 2 7 12 12 22 7 12 2'/><polygon points='2 17 12 22 22 17'/><polygon points='2 12 12 17 22 12'/></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css">
+  <!-- Chart.js for Portfolio & LTV Gauges -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body class="theme-light">
+  <!-- App Container -->
+  <div id="app" class="app-layout">
+    
+    <!-- Top Global Header (Zerodha Kite Style) -->
+    <header class="kite-header">
+      <div class="header-left">
+        <div class="brand">
+          <div class="brand-logo">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+              <path d="M12 2L2 7L12 12L22 7L12 2Z" fill="#ff5722"/>
+              <path d="M2 17L12 22L22 17L12 12L2 17Z" fill="#ff784e"/>
+            </svg>
+          </div>
+          <span class="brand-name">FINODHA</span>
+          <span class="brand-tag">MARGIN & LEDGER</span>
+        </div>
+
+        <!-- Live Exchange Tickers -->
+        <div class="header-indices">
+          <div class="index-item">
+            <span class="index-name">NIFTY 50</span>
+            <span class="index-val" id="niftyVal">24,852.15</span>
+            <span class="index-change pos" id="niftyChange">+124.60 (+0.50%)</span>
+          </div>
+          <div class="index-divider"></div>
+          <div class="index-item">
+            <span class="index-name">SENSEX</span>
+            <span class="index-val" id="sensexVal">81,418.40</span>
+            <span class="index-change pos" id="sensexChange">+345.10 (+0.43%)</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Live WebSocket Pulse & Navigation -->
+      <div class="header-right">
+        <div class="ws-status" id="wsStatus">
+          <span class="pulse-dot"></span>
+          <span class="status-text">LIVE TICKER</span>
+        </div>
+
+        <nav class="nav-links">
+          <button class="nav-btn active" data-tab="dashboard">Dashboard</button>
+          <button class="nav-btn" data-tab="holdings">Holdings & Collateral</button>
+          <button class="nav-btn" data-tab="loans">Margin Loans (LAS)</button>
+          <button class="nav-btn" data-tab="ledger">Financial Ledger</button>
+          <button class="nav-btn highlight" data-tab="shock">Market Simulator</button>
+          <button class="nav-btn" data-tab="api">API Docs</button>
+        </nav>
+
+        <div class="header-divider"></div>
+
+        <!-- Theme Toggle -->
+        <button id="themeToggleBtn" class="theme-toggle" title="Toggle Dark/Light Mode">
+          <i data-lucide="moon" class="dark-icon"></i>
+          <i data-lucide="sun" class="light-icon"></i>
+        </button>
+
+        <!-- User Profile Pill -->
+        <div class="user-pill" id="userPill">
+          <div class="avatar" id="userAvatar">AS</div>
+          <div class="user-info">
+            <span class="client-id" id="navClientId">ZD8842</span>
+            <span class="client-name" id="navClientName">Abhishek S.</span>
+          </div>
+          <button id="logoutBtn" class="logout-btn" title="Sign Out">
+            <i data-lucide="log-out"></i>
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <!-- Global Margin Call Urgent Alert Banner (Conditionally Shown) -->
+    <div id="marginCallBanner" class="margin-call-banner hidden">
+      <div class="banner-content">
+        <div class="banner-icon">
+          <i data-lucide="alert-triangle"></i>
+        </div>
+        <div class="banner-text">
+          <strong id="bannerTitle">MARGIN CALL WARNING: LTV Breached Threshold!</strong>
+          <span id="bannerMsg">Your portfolio LTV has reached critical levels. Deposit funds, pledge additional collateral, or cure the deficit before forced liquidation.</span>
+        </div>
+        <div class="banner-actions">
+          <button id="cureRepayBtn" class="btn btn-sm btn-primary">Repay Shortfall</button>
+          <button id="curePledgeBtn" class="btn btn-sm btn-outline">Pledge More</button>
+          <button id="autoLiquidateBtn" class="btn btn-sm btn-danger">Execute Auto-Liquidation</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Main Workspace -->
+    <div class="main-body">
+      
+      <!-- Left Column: Marketwatch (Zerodha Style) -->
+      <aside class="marketwatch-sidebar">
+        <div class="mw-header">
+          <div class="mw-tabs">
+            <span class="active">Marketwatch 1</span>
+            <span>Nifty 50</span>
+          </div>
+          <div class="mw-count" id="mwCount">12 instruments</div>
+        </div>
+
+        <div class="mw-search">
+          <i data-lucide="search"></i>
+          <input type="text" id="mwSearchInput" placeholder="Search eg: infy, reliance, tcs, bse, nse...">
+        </div>
+
+        <div class="mw-list" id="mwList">
+          <!-- Loaded dynamically -->
+          <div class="loading-spinner">Loading Marketwatch...</div>
+        </div>
+
+        <div class="mw-footer">
+          <div class="market-status">
+            <span class="status-indicator open"></span>
+            <span>NSE MARKET OPEN</span>
+          </div>
+          <span class="market-time" id="marketClock">12:00:00</span>
+        </div>
+      </aside>
+
+      <!-- Right Column: Main Tab Contents -->
+      <main class="content-viewport">
+
+        <!-- TAB 1: DASHBOARD -->
+        <section id="tab-dashboard" class="tab-pane active">
+          
+          <!-- Summary Metric Cards -->
+          <div class="metric-grid">
+            <div class="metric-card">
+              <div class="metric-title">
+                <span>Total Portfolio Value</span>
+                <i data-lucide="trending-up" class="metric-icon"></i>
+              </div>
+              <div class="metric-val" id="dashTotalPortfolio">₹0.00</div>
+              <div class="metric-sub" id="dashPortfolioPnl">Unrealized P&L: ₹0.00 (0.00%)</div>
+            </div>
+
+            <div class="metric-card">
+              <div class="metric-title">
+                <span>Eligible Collateral Value</span>
+                <span class="badge badge-info" title="Value after SEBI haircuts">Post-Haircut</span>
+              </div>
+              <div class="metric-val text-blue" id="dashCollateralVal">₹0.00</div>
+              <div class="metric-sub">Pledged Gross: <span id="dashPledgedGross">₹0.00</span></div>
+            </div>
+
+            <div class="metric-card">
+              <div class="metric-title">
+                <span>Available Margin to Borrow</span>
+                <button id="quickApplyLoanBtn" class="btn-link">+ Apply Loan</button>
+              </div>
+              <div class="metric-val text-green" id="dashAvailableMargin">₹0.00</div>
+              <div class="metric-sub">Max Permitted (65% LTV): <span id="dashMaxBorrow">₹0.00</span></div>
+            </div>
+
+            <div class="metric-card">
+              <div class="metric-title">
+                <span>Active Margin Debt</span>
+                <i data-lucide="credit-card" class="metric-icon"></i>
+              </div>
+              <div class="metric-val text-red" id="dashTotalDebt">₹0.00</div>
+              <div class="metric-sub">Principal: <span id="dashPrincipalDebt">₹0.00</span> | Interest: <span id="dashInterestDebt">₹0.00</span></div>
+            </div>
+          </div>
+
+          <!-- Margin Health & Collateral Visualizer -->
+          <div class="dash-row">
+            
+            <!-- Health Gauge Card -->
+            <div class="card flex-1">
+              <div class="card-header">
+                <div>
+                  <h3 class="card-title">Margin Health & LTV Thresholds</h3>
+                  <p class="card-desc">Real-time Loan-to-Value monitoring and risk buffer</p>
+                </div>
+                <div class="badge" id="ltvHealthBadge">HEALTHY</div>
+              </div>
+              
+              <div class="ltv-gauge-wrapper">
+                <div class="ltv-meter-container">
+                  <div class="ltv-meter-bar">
+                    <div class="meter-zone zone-safe" style="width: 60%;" title="Safe Zone (<60%)"></div>
+                    <div class="meter-zone zone-warning" style="width: 15%;" title="Warning Zone (60-75%)"></div>
+                    <div class="meter-zone zone-call" style="width: 10%;" title="Margin Call (75-85%)"></div>
+                    <div class="meter-zone zone-liquidation" style="width: 15%;" title="Forced Liquidation (>85%)"></div>
+                    <div class="meter-pointer" id="meterPointer" style="left: 35%;">
+                      <div class="pointer-pin"></div>
+                      <div class="pointer-label" id="pointerLabel">35.0%</div>
+                    </div>
+                  </div>
+                  <div class="meter-ticks">
+                    <span>0%</span>
+                    <span>60% (Safe Limit)</span>
+                    <span>75% (Margin Call)</span>
+                    <span>85% (Liquidation)</span>
+                    <span>100%</span>
+                  </div>
+                </div>
+
+                <div class="ltv-breakdown-table">
+                  <div class="breakdown-item">
+                    <span class="label">Current LTV Ratio:</span>
+                    <strong class="val" id="lblCurrentLtv">0.00%</strong>
+                  </div>
+                  <div class="breakdown-item">
+                    <span class="label">Margin Maintenance Status:</span>
+                    <strong class="val" id="lblLtvStatus">Optimal</strong>
+                  </div>
+                  <div class="breakdown-item">
+                    <span class="label">Shortfall Amount Required:</span>
+                    <strong class="val text-red" id="lblShortfall">₹0.00</strong>
+                  </div>
+                  <div class="breakdown-item">
+                    <span class="label">Cash Balance in Account:</span>
+                    <strong class="val text-green" id="lblCashBal">₹0.00</strong>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Portfolio Allocation Chart -->
+            <div class="card w-350">
+              <div class="card-header">
+                <h3 class="card-title">Collateral Allocation</h3>
+              </div>
+              <div class="chart-container">
+                <canvas id="collateralDonutChart" height="220"></canvas>
+              </div>
+            </div>
+          </div>
+
+          <!-- Quick Action Bar -->
+          <div class="quick-actions-bar">
+            <button id="openApplyLoanModalBtn" class="btn btn-primary">
+              <i data-lucide="plus-circle"></i>
+              Apply Instant Margin Loan
+            </button>
+            <button id="openPledgeModalBtn" class="btn btn-secondary">
+              <i data-lucide="shield-check"></i>
+              Pledge / Unpledge Securities
+            </button>
+            <button id="openRepayModalBtn" class="btn btn-secondary">
+              <i data-lucide="corner-down-left"></i>
+              Make Loan Repayment
+            </button>
+            <button id="quickVerifyLedgerBtn" class="btn btn-outline">
+              <i data-lucide="check-check"></i>
+              Verify Ledger Integrity (SHA-256)
+            </button>
+          </div>
+
+        </section>
+
+        <!-- TAB 2: HOLDINGS & COLLATERAL -->
+        <section id="tab-holdings" class="tab-pane">
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <h3 class="card-title">Demat Holdings & Collateral Haircut Matrix</h3>
+                <p class="card-desc">Securities eligible for Margin Trading Facility (MTF) and collateral pledging</p>
+              </div>
+              <div class="header-tools">
+                <span class="badge badge-neutral" id="holdingsCountBadge">0 Equities</span>
+              </div>
+            </div>
+
+            <div class="table-responsive">
+              <table class="kite-table" id="holdingsTable">
+                <thead>
+                  <tr>
+                    <th>Instrument</th>
+                    <th>Qty (Total)</th>
+                    <th>Avg. Price</th>
+                    <th>LTP (CMP)</th>
+                    <th>Cur. Value</th>
+                    <th>P&L</th>
+                    <th>SEBI Haircut</th>
+                    <th>Pledged Qty</th>
+                    <th>Net Collateral</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="holdingsTableBody">
+                  <!-- Rendered via JS -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- TAB 3: MARGIN LOANS (LAS / MTF) -->
+        <section id="tab-loans" class="tab-pane">
+          <div class="loans-header-banner">
+            <div class="banner-info">
+              <h2>Instant Loan Against Securities (LAS)</h2>
+              <p>Borrow automated margin loans up to 65% of your pledged equity collateral at a competitive 10.5% p.a. interest rate with zero prepayment penalties.</p>
+            </div>
+            <button id="loansTabApplyBtn" class="btn btn-primary btn-lg">
+              <i data-lucide="zap"></i>
+              Borrow Instant Margin
+            </button>
+          </div>
+
+          <div class="card mt-20">
+            <div class="card-header">
+              <h3 class="card-title">Active & Historical Margin Loan Ledger</h3>
+              <div class="filters">
+                <span class="filter-tag active">All Contracts</span>
+              </div>
+            </div>
+
+            <div class="table-responsive">
+              <table class="kite-table" id="loansTable">
+                <thead>
+                  <tr>
+                    <th>Loan Ref ID</th>
+                    <th>Disbursed Date</th>
+                    <th>Principal</th>
+                    <th>Remaining Debt</th>
+                    <th>Accrued Interest</th>
+                    <th>Interest Rate</th>
+                    <th>Initial LTV</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="loansTableBody">
+                  <!-- Rendered via JS -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- TAB 4: FINANCIAL LEDGER -->
+        <section id="tab-ledger" class="tab-pane">
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <h3 class="card-title">Immutable Double-Entry Financial Ledger</h3>
+                <p class="card-desc">Console-style statement of accounts with cryptographic SHA-256 block hash chaining</p>
+              </div>
+              <div class="ledger-header-actions">
+                <button id="verifyAuditChainBtn" class="btn btn-sm btn-outline">
+                  <i data-lucide="shield-alert"></i>
+                  Verify SHA-256 Checksum Chain
+                </button>
+                <button id="exportCsvBtn" class="btn btn-sm btn-secondary">
+                  <i data-lucide="download"></i>
+                  Export Statement
+                </button>
+              </div>
+            </div>
+
+            <!-- Ledger Audit Banner -->
+            <div id="auditStatusBanner" class="audit-status-banner">
+              <div class="audit-status-icon">
+                <i data-lucide="lock" class="text-green"></i>
+              </div>
+              <div class="audit-status-text">
+                <strong id="auditChainStatusText">Cryptographic Chain: VERIFIED & INTACT</strong>
+                <span id="auditChainSubText">All transactions mathematically signed using SHA-256 hash chaining against previous ledger state.</span>
+              </div>
+            </div>
+
+            <div class="table-responsive">
+              <table class="kite-table ledger-table" id="ledgerTable">
+                <thead>
+                  <tr>
+                    <th>Seq #</th>
+                    <th>Timestamp</th>
+                    <th>Transaction Type</th>
+                    <th>Reference</th>
+                    <th>Particulars / Description</th>
+                    <th>Debit (Dr)</th>
+                    <th>Credit (Cr)</th>
+                    <th>Running Cash</th>
+                    <th>Running Debt</th>
+                    <th>SHA-256 Hash</th>
+                  </tr>
+                </thead>
+                <tbody id="ledgerTableBody">
+                  <!-- Rendered via JS -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- TAB 5: MARKET CRASH / SHOCK SIMULATOR -->
+        <section id="tab-shock" class="tab-pane">
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <h3 class="card-title">Market Stress Testing & Margin Call Simulator</h3>
+                <p class="card-desc">Simulate severe market selloffs or rallies to test real-time LTV margin call triggers and auto-liquidation logic.</p>
+              </div>
+            </div>
+
+            <div class="shock-simulator-grid">
+              <div class="shock-controls">
+                <label class="shock-label">Simulate Market Price Shock (%):</label>
+                <div class="slider-wrapper">
+                  <input type="range" id="shockSlider" min="-60" max="40" step="5" value="0">
+                  <div class="slider-ticks">
+                    <span class="text-red">-60% Crash</span>
+                    <span class="text-red">-30% Correction</span>
+                    <span>0% Baseline</span>
+                    <span class="text-green">+20% Rally</span>
+                    <span class="text-green">+40% Bull</span>
+                  </div>
+                </div>
+
+                <div class="shock-display">
+                  <span>Selected Market Movement:</span>
+                  <strong id="shockDisplayVal" class="shock-val">0%</strong>
+                </div>
+
+                <div class="shock-btn-group">
+                  <button id="applyShockBtn" class="btn btn-danger">
+                    <i data-lucide="activity"></i>
+                    Apply Market Movement
+                  </button>
+                  <button id="quickCrash35Btn" class="btn btn-outline text-red">
+                    Instant -35% Crash
+                  </button>
+                  <button id="resetMarketBtn" class="btn btn-secondary">
+                    <i data-lucide="rotate-ccw"></i>
+                    Reset to Baseline Prices
+                  </button>
+                </div>
+              </div>
+
+              <div class="shock-impact-box">
+                <h4>Simulated Impact on Your Margin Health</h4>
+                <div class="impact-metric">
+                  <span>Current Portfolio LTV:</span>
+                  <strong id="simCurrentLtv">0.00%</strong>
+                </div>
+                <div class="impact-metric">
+                  <span>Threshold Trigger Status:</span>
+                  <strong id="simTriggerStatus">Normal (Safe)</strong>
+                </div>
+                <div class="impact-metric">
+                  <span>Shortfall Amount:</span>
+                  <strong id="simShortfallAmt" class="text-red">₹0.00</strong>
+                </div>
+                <div class="impact-metric">
+                  <span>Auto-Liquidation Status:</span>
+                  <strong id="simLiquidationStatus">Not Triggered</strong>
+                </div>
+
+                <div class="mt-15">
+                  <button id="simAutoLiquidateBtn" class="btn btn-sm btn-danger w-full">
+                    <i data-lucide="zap-off"></i>
+                    Trigger Automated Partial Liquidation
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- TAB 6: API DOCS & POSTGRESQL ARCHITECTURE -->
+        <section id="tab-api" class="tab-pane">
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <h3 class="card-title">Finodha Backend Architecture & API Specifications</h3>
+                <p class="card-desc">REST API Endpoints, Double-Entry Accounting Specifications, and PostgreSQL DDL</p>
+              </div>
+            </div>
+
+            <div class="api-docs-content">
+              <h4>System Architecture Overview</h4>
+              <p>Finodha implements an institutional-grade financial ledger engine modeled after Zerodha's trading infrastructure and SEBI's Margin Trading Facility (MTF) regulatory framework.</p>
+
+              <div class="api-endpoint-list">
+                <div class="api-endpoint-item">
+                  <span class="http-badge post">POST</span>
+                  <code>/api/auth/login</code>
+                  <span class="desc">Rate-limited authentication endpoint returning JWT token.</span>
+                </div>
+                <div class="api-endpoint-item">
+                  <span class="http-badge get">GET</span>
+                  <code>/api/portfolio</code>
+                  <span class="desc">Calculates real-time portfolio valuation, SEBI haircuts, and borrowing headroom.</span>
+                </div>
+                <div class="api-endpoint-item">
+                  <span class="http-badge post">POST</span>
+                  <code>/api/portfolio/pledge</code>
+                  <span class="desc">Pledges or unpledges securities with LTV threshold verification.</span>
+                </div>
+                <div class="api-endpoint-item">
+                  <span class="http-badge post">POST</span>
+                  <code>/api/loans/apply</code>
+                  <span class="desc">Automated instant margin loan origination and disbursement with ledger debit/credit.</span>
+                </div>
+                <div class="api-endpoint-item">
+                  <span class="http-badge post">POST</span>
+                  <code>/api/loans/:id/repay</code>
+                  <span class="desc">Partial or full repayment processing with interest-first allocation.</span>
+                </div>
+                <div class="api-endpoint-item">
+                  <span class="http-badge get">GET</span>
+                  <code>/api/ledger/verify</code>
+                  <span class="desc">Mathematical verification of SHA-256 chained transaction blocks.</span>
+                </div>
+                <div class="api-endpoint-item">
+                  <span class="http-badge post">POST</span>
+                  <code>/api/margin/liquidate</code>
+                  <span class="desc">Automated liquidation trigger to cure margin shortfall and restore safe LTV.</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+      </main>
+    </div>
+
+    <!-- MODAL: APPLY MARGIN LOAN -->
+    <div id="applyLoanModal" class="modal-overlay hidden">
+      <div class="modal-box">
+        <div class="modal-header">
+          <h3>Apply for Instant Margin Loan (LAS)</h3>
+          <button class="modal-close" data-close="applyLoanModal">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="loan-calc-summary">
+            <div class="calc-row">
+              <span>Eligible Collateral Value:</span>
+              <strong id="modalCollateralVal">₹0.00</strong>
+            </div>
+            <div class="calc-row">
+              <span>Max Borrowable (65% LTV):</span>
+              <strong id="modalMaxBorrow">₹0.00</strong>
+            </div>
+            <div class="calc-row">
+              <span>Current Available Room:</span>
+              <strong class="text-green" id="modalAvailableBorrow">₹0.00</strong>
+            </div>
+          </div>
+
+          <div class="form-group mt-15">
+            <label>Loan Amount to Borrow (₹):</label>
+            <input type="number" id="loanAmountInput" class="form-input" min="5000" step="5000" placeholder="e.g. 50000">
+            <div class="quick-amount-chips">
+              <button class="chip" data-amt="25000">₹25,000</button>
+              <button class="chip" data-amt="50000">₹50,000</button>
+              <button class="chip" data-amt="100000">₹1,00,000</button>
+              <button class="chip" id="chipMaxAmt">Max Allowed</button>
+            </div>
+          </div>
+
+          <div class="loan-terms-box">
+            <div class="term-item">
+              <span>Annual Interest Rate:</span>
+              <strong>10.50% p.a.</strong>
+            </div>
+            <div class="term-item">
+              <span>Disbursement:</span>
+              <strong>Instant to Trading Cash</strong>
+            </div>
+            <div class="term-item">
+              <span>Tenure:</span>
+              <strong>6 Months (Auto-Renewable)</strong>
+            </div>
+            <div class="term-item">
+              <span>Prepayment Penalty:</span>
+              <strong>Nil (₹0.00)</strong>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" data-close="applyLoanModal">Cancel</button>
+          <button id="submitApplyLoanBtn" class="btn btn-primary">
+            <i data-lucide="check"></i>
+            Disburse Loan Instantly
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- MODAL: REPAY LOAN -->
+    <div id="repayLoanModal" class="modal-overlay hidden">
+      <div class="modal-box">
+        <div class="modal-header">
+          <h3>Make Loan Repayment</h3>
+          <button class="modal-close" data-close="repayLoanModal">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="loan-calc-summary">
+            <div class="calc-row">
+              <span>Selected Loan Contract:</span>
+              <strong id="repayModalLoanId">-</strong>
+            </div>
+            <div class="calc-row">
+              <span>Remaining Principal:</span>
+              <strong id="repayModalPrincipal">₹0.00</strong>
+            </div>
+            <div class="calc-row">
+              <span>Accrued Interest:</span>
+              <strong class="text-orange" id="repayModalInterest">₹0.00</strong>
+            </div>
+            <div class="calc-row">
+              <span>Total Payoff Amount:</span>
+              <strong class="text-red" id="repayModalTotal">₹0.00</strong>
+            </div>
+          </div>
+
+          <div class="form-group mt-15">
+            <label>Payment Source:</label>
+            <div class="radio-group">
+              <label class="radio-label">
+                <input type="radio" name="repaySource" value="CASH_BALANCE" checked>
+                <span>Trading Cash Balance (<span id="repayAvailableCash">₹0.00</span> available)</span>
+              </label>
+              <label class="radio-label">
+                <input type="radio" name="repaySource" value="EXTERNAL_UPI">
+                <span>Direct Bank / UPI Transfer (Instant Settlement)</span>
+              </label>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>Repayment Amount (₹):</label>
+            <input type="number" id="repayAmountInput" class="form-input" min="100" placeholder="Enter repayment amount">
+            <div class="quick-amount-chips">
+              <button class="chip" id="repayInterestOnlyChip">Interest Only</button>
+              <button class="chip" data-amt="10000">₹10,000</button>
+              <button class="chip" data-amt="25000">₹25,000</button>
+              <button class="chip" id="repayFullPayoffChip">Full Settlement</button>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" data-close="repayLoanModal">Cancel</button>
+          <button id="submitRepayLoanBtn" class="btn btn-primary">
+            <i data-lucide="check-circle-2"></i>
+            Confirm Repayment
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- MODAL: PLEDGE / UNPLEDGE HOLDING -->
+    <div id="pledgeModal" class="modal-overlay hidden">
+      <div class="modal-box">
+        <div class="modal-header">
+          <h3 id="pledgeModalTitle">Pledge Securities for Margin</h3>
+          <button class="modal-close" data-close="pledgeModal">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="loan-calc-summary">
+            <div class="calc-row">
+              <span>Instrument:</span>
+              <strong id="pledgeSymbol">-</strong>
+            </div>
+            <div class="calc-row">
+              <span>Current Market Price:</span>
+              <strong id="pledgeCmp">₹0.00</strong>
+            </div>
+            <div class="calc-row">
+              <span>SEBI Haircut Discount:</span>
+              <strong id="pledgeHaircut">0%</strong>
+            </div>
+            <div class="calc-row">
+              <span id="pledgeAvailableQtyLabel">Free Quantity Available:</span>
+              <strong id="pledgeMaxQty">0 shares</strong>
+            </div>
+          </div>
+
+          <div class="form-group mt-15">
+            <label>Number of Shares:</label>
+            <input type="number" id="pledgeQtyInput" class="form-input" min="1" placeholder="Enter share quantity">
+          </div>
+
+          <div class="calc-row mt-10">
+            <span>Estimated Collateral Value Added:</span>
+            <strong class="text-green" id="pledgeNetValEst">₹0.00</strong>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" data-close="pledgeModal">Cancel</button>
+          <button id="submitPledgeBtn" class="btn btn-primary">Confirm</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- MODAL: ORDER EXECUTION (BUY / SELL) -->
+    <div id="orderModal" class="modal-overlay hidden">
+      <div class="modal-box">
+        <div class="modal-header">
+          <h3 id="orderModalTitle">Place Order</h3>
+          <button class="modal-close" data-close="orderModal">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="order-type-tabs">
+            <button class="order-side-btn buy active" id="btnSideBuy">BUY</button>
+            <button class="order-side-btn sell" id="btnSideSell">SELL</button>
+          </div>
+
+          <div class="loan-calc-summary mt-10">
+            <div class="calc-row">
+              <span>Instrument:</span>
+              <strong id="orderSymbol">RELIANCE</strong>
+            </div>
+            <div class="calc-row">
+              <span>Market Price (CMP):</span>
+              <strong id="orderCmp">₹0.00</strong>
+            </div>
+            <div class="calc-row">
+              <span>Trading Balance:</span>
+              <strong id="orderCashBal">₹0.00</strong>
+            </div>
+          </div>
+
+          <div class="form-group mt-15">
+            <label>Quantity:</label>
+            <input type="number" id="orderQtyInput" class="form-input" min="1" value="10">
+          </div>
+
+          <div class="calc-row mt-10">
+            <span>Total Order Value:</span>
+            <strong class="text-blue" id="orderTotalVal">₹0.00</strong>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" data-close="orderModal">Cancel</button>
+          <button id="submitOrderBtn" class="btn btn-primary">Execute Order</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Notification Toast Container -->
+    <div id="toastContainer" class="toast-container"></div>
+
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>
